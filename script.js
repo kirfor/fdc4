@@ -1,148 +1,204 @@
-document.getElementById('textForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const determinant = document.getElementById('determinant');
-    const func = document.getElementById('function');
-    const errorMessage = document.getElementById('error-message');
-    const resultsBody = document.getElementById('results-body');
-    
-    // Сброс ошибок
-    determinant.classList.remove('error');
-    func.classList.remove('error');
-    errorMessage.style.display = 'none';
-    errorMessage.textContent = '';
-    
-    // Функция валидации
-    const validateSequence = (value, fieldName) => {
-        if (!value.trim()) {
-            return { valid: false, message: `${fieldName}: Введите хотя бы один атрибут!` };
-        }
-        
-        const strings = value.split(',').map(s => s.trim()).filter(s => s !== '');
-        
-        if (strings.length > 1 && !/,/.test(value)) {
-            return { valid: false, message: `${fieldName}: Разделяйте атрибуты запятыми!` };
-        }
-        
-        const seen = {};
-        for (const str of strings) {
-            if (seen[str]) {
-                return { 
-                    valid: false, 
-                    message: `${fieldName}: Атрибут "${str}" повторяется!`
-                };
-            }
-            seen[str] = true;
-        }
-        
-        for (const str of strings) {
-            if (/\s/.test(str)) {
-                return { valid: false, message: `${fieldName}: Атрибут "${str}" содержит пробелы!` };
-            }
-            
-            if (str.length > 5) {
-                return { valid: false, message: `${fieldName}: Атрибут "${str}" слишком длинный!` };
-            }
-        }
-        
-        return { valid: true, strings: strings };
-    };
-    
-    // Проверка обоих полей
-    const validationDet = validateSequence(determinant.value, 'Детерминанта');
-    const validationFunc = validateSequence(func.value, 'Функция');
-    
-    // Собираем ошибки
-    const errors = [];
-    if (!validationDet.valid) errors.push(validationDet.message);
-    if (!validationFunc.valid) errors.push(validationFunc.message);
-    
-    // Проверка на тривиальную зависимость
-    if (errors.length === 0) {
-        const detStrings = validationDet.strings;
-        const funcStrings = validationFunc.strings;
-        
-        for (const attr of funcStrings) {
-            if (detStrings.includes(attr)) {
-                errors.push(`Тривиальная зависимость: атрибут ${attr} содержится в детерминанте!`);
-                determinant.classList.add('error');
-                func.classList.add('error');
-                break;
-            }
-        }
-    }
-    
-    // Проверка на существующую ФЗ
-    if (errors.length === 0) {
-        const detStr = validationDet.strings.join(',');
-        const funcStr = validationFunc.strings.join(',');
-        
-        const rows = resultsBody.querySelectorAll('.fz-row');
-        for (const row of rows) {
-            const cells = row.querySelectorAll('div');
-            const rowDet = cells[0].textContent;
-            const rowFunc = cells[1].textContent;
-            
-            if (rowDet === detStr && rowFunc === funcStr) {
-                errors.push('Такая ФЗ уже существует!');
-                determinant.classList.add('error');
-                func.classList.add('error');
-                break;
-            }
-        }
-    }
-    
-    // Показываем ошибки
-    if (errors.length > 0) {
-        errorMessage.textContent = errors.join(' ');
-        errorMessage.style.display = 'block';
-        return;
-    }
-    
-    // Если все проверки пройдены - добавляем данные в таблицу
-    const row = document.createElement('div');
-    row.className = 'fz-row';
-    
-    const detCell = document.createElement('div');
-    detCell.textContent = validationDet.strings.join(', ');
-    row.appendChild(detCell);
-    
-    const funcCell = document.createElement('div');
-    funcCell.textContent = validationFunc.strings.join(', ');
-    row.appendChild(funcCell);
-    
-    const actionCell = document.createElement('div');
-    const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = '×';
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.title = 'Удалить';
-    deleteBtn.addEventListener('click', function() {
-        row.remove();
-        updateDependencyGraph();
-    });
-    actionCell.appendChild(deleteBtn);
-    row.appendChild(actionCell);
-    
-    // Добавляем в начало таблицы
-    resultsBody.insertBefore(row, resultsBody.firstChild);
-    
-    // Очищаем поля ввода
-    determinant.value = '';
-    func.value = '';
-    
-    // Обновляем граф зависимостей
-    updateDependencyGraph();
-});
-
-// Функция для обновления графа зависимостей (остаётся без изменений)
-function updateDependencyGraph() {
-    // ... (прежняя реализация функции)
-}
-
-// Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', function() {
-    updateDependencyGraph();
-    window.addEventListener('resize', function() {
-        setTimeout(updateDependencyGraph, 200);
+    const form = document.getElementById('textForm');
+    const results = document.getElementById('results');
+    const graph = document.getElementById('dependency-graph');
+    
+    // Хранилище для ФЗ
+    let dependencies = [];
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const determinant = document.getElementById('determinant').value.trim();
+        const func = document.getElementById('function').value.trim();
+        const errorElement = document.getElementById('error-message');
+        
+        // Валидация
+        if (!determinant || !func) {
+            showError('Оба поля должны быть заполнены!', errorElement);
+            return;
+        }
+        
+        const detAttrs = determinant.split(',').map(s => s.trim()).filter(Boolean);
+        const funcAttrs = func.split(',').map(s => s.trim()).filter(Boolean);
+        
+        if (detAttrs.length === 0 || funcAttrs.length === 0) {
+            showError('Введите хотя бы один атрибут в каждом поле!', errorElement);
+            return;
+        }
+        
+        // Проверка на тривиальную зависимость
+        for (const attr of funcAttrs) {
+            if (detAttrs.includes(attr)) {
+                showError(`Тривиальная зависимость: ${attr} содержится в детерминанте!`, errorElement);
+                return;
+            }
+        }
+        
+        // Проверка на дубликат
+        const newDep = { determinant: detAttrs, function: funcAttrs };
+        if (isDuplicate(newDep)) {
+            showError('Такая ФЗ уже существует!', errorElement);
+            return;
+        }
+        
+        // Добавляем новую ФЗ
+        dependencies.push(newDep);
+        renderTable();
+        renderGraph();
+        
+        // Очищаем форму
+        form.reset();
+        errorElement.style.display = 'none';
     });
+    
+    function isDuplicate(newDep) {
+        return dependencies.some(dep => 
+            arraysEqual(dep.determinant, newDep.determinant) && 
+            arraysEqual(dep.function, newDep.function)
+        );
+    }
+    
+    function arraysEqual(a, b) {
+        return a.length === b.length && a.every((val, i) => val === b[i]);
+    }
+    
+    function showError(message, element) {
+        element.textContent = message;
+        element.style.display = 'block';
+    }
+    
+    function renderTable() {
+        results.innerHTML = '';
+        
+        if (dependencies.length === 0) {
+            results.innerHTML = '<p>Нет добавленных зависимостей</p>';
+            return;
+        }
+        
+        dependencies.forEach((dep, index) => {
+            const row = document.createElement('div');
+            row.className = 'fz-row';
+            
+            const detCell = document.createElement('div');
+            detCell.textContent = dep.determinant.join(', ');
+            
+            const funcCell = document.createElement('div');
+            funcCell.textContent = dep.function.join(', ');
+            
+            const actionCell = document.createElement('div');
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Удалить';
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.onclick = () => {
+                dependencies.splice(index, 1);
+                renderTable();
+                renderGraph();
+            };
+            
+            actionCell.appendChild(deleteBtn);
+            row.append(detCell, funcCell, actionCell);
+            results.appendChild(row);
+        });
+    }
+    
+    function renderGraph() {
+        graph.innerHTML = '';
+        
+        if (dependencies.length === 0) {
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', '50%');
+            text.setAttribute('y', '50%');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('fill', '#666');
+            text.textContent = 'Добавьте ФЗ для отображения графа';
+            graph.appendChild(text);
+            return;
+        }
+        
+        // Собираем все уникальные атрибуты
+        const allAttrs = new Set();
+        dependencies.forEach(dep => {
+            dep.determinant.forEach(attr => allAttrs.add(attr));
+            dep.function.forEach(attr => allAttrs.add(attr));
+        });
+        
+        const attrs = Array.from(allAttrs);
+        const width = graph.clientWidth;
+        const height = graph.clientHeight;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = Math.min(width, height) * 0.4;
+        
+        // Рисуем стрелки
+        dependencies.forEach(dep => {
+            dep.determinant.forEach(detAttr => {
+                dep.function.forEach(funcAttr => {
+                    const fromIndex = attrs.indexOf(detAttr);
+                    const toIndex = attrs.indexOf(funcAttr);
+                    
+                    const fromAngle = (fromIndex / attrs.length) * Math.PI * 2 - Math.PI/2;
+                    const toAngle = (toIndex / attrs.length) * Math.PI * 2 - Math.PI/2;
+                    
+                    const x1 = centerX + Math.cos(fromAngle) * radius;
+                    const y1 = centerY + Math.sin(fromAngle) * radius;
+                    const x2 = centerX + Math.cos(toAngle) * radius;
+                    const y2 = centerY + Math.sin(toAngle) * radius;
+                    
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x1);
+                    line.setAttribute('y1', y1);
+                    line.setAttribute('x2', x2);
+                    line.setAttribute('y2', y2);
+                    line.setAttribute('stroke', '#ff4444');
+                    line.setAttribute('stroke-width', '2');
+                    line.setAttribute('marker-end', 'url(#arrowhead)');
+                    graph.appendChild(line);
+                });
+            });
+        });
+        
+        // Добавляем маркер для стрелок
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', 'arrowhead');
+        marker.setAttribute('markerWidth', '10');
+        marker.setAttribute('markerHeight', '7');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '3.5');
+        marker.setAttribute('orient', 'auto');
+        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        arrow.setAttribute('d', 'M0,0 L10,3.5 L0,7 Z');
+        arrow.setAttribute('fill', '#ff4444');
+        marker.appendChild(arrow);
+        defs.appendChild(marker);
+        graph.appendChild(defs);
+        
+        // Рисуем узлы
+        attrs.forEach((attr, index) => {
+            const angle = (index / attrs.length) * Math.PI * 2 - Math.PI/2;
+            const x = centerX + Math.cos(angle) * radius;
+            const y = centerY + Math.sin(angle) * radius;
+            
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', x);
+            circle.setAttribute('cy', y);
+            circle.setAttribute('r', 15);
+            circle.setAttribute('fill', '#35424a');
+            graph.appendChild(circle);
+            
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', x);
+            text.setAttribute('y', y + 5);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('fill', 'white');
+            text.textContent = attr;
+            graph.appendChild(text);
+        });
+    }
+    
+    // Инициализация
+    renderTable();
+    renderGraph();
+    window.addEventListener('resize', renderGraph);
 });
