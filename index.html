@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ввод системы функциональных зависимостей</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="site-title">Ввод системы функциональных зависимостей</h1>
+        
+        <form id="textForm" class="input-form">
+            <div class="input-group">
+                <label for="determinant">Детерминанта:</label>
+                <input type="text" id="determinant" placeholder="атрибуты через запятую" class="wide-input">
+            </div>
+            <div class="input-group">
+                <label for="function">Функция:</label>
+                <input type="text" id="function" placeholder="атрибуты через запятую" class="wide-input">
+            </div>
+            <button type="submit" class="check-button">Добавить ФЗ</button>
+            <div id="error-message" class="error-message"></div>
+        </form>
+
+        <div class="content-wrapper">
+            <div id="results" class="results-table">
+                <div class="table-header">
+                    <span>Детерминанта</span>
+                    <span>Функция</span>
+                    <span>Действия</span>
+                </div>
+                <div id="results-body" class="table-body">
+                    <!-- Сюда будут добавляться результаты -->
+                </div>
+            </div>
+
+            <div id="graph-container" class="graph-container">
+                <h3>Графическое представление</h3>
+                <svg id="dependency-graph" width="100%" height="300">
+                    <!-- Граф будет отрисовываться здесь -->
+                </svg>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

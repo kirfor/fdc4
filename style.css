@@ -1,0 +1,56 @@
+/* ... предыдущие стили остаются без изменений ... */
+
+.content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+@media (min-width: 992px) {
+    .content-wrapper {
+        flex-direction: row;
+    }
+    
+    .results-table {
+        flex: 2;
+    }
+    
+    .graph-container {
+        flex: 1;
+        min-width: 300px;
+    }
+}
+
+.graph-container {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.graph-container h3 {
+    margin-top: 0;
+    color: #35424a;
+    text-align: center;
+}
+
+/* Стили для графа */
+.node {
+    fill: #35424a;
+    stroke: #fff;
+    stroke-width: 2px;
+}
+
+.link {
+    stroke: #ff4444;
+    stroke-width: 2;
+    fill: none;
+    marker-end: url(#arrowhead);
+}
+
+.attribute-label {
+    font-size: 12px;
+    fill: #fff;
+    text-anchor: middle;
+    pointer-events: none;
+}
