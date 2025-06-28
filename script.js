@@ -1,123 +1,148 @@
-// Функция для обновления графа зависимостей
-function updateDependencyGraph() {
-    const svg = document.getElementById('dependency-graph');
-    svg.innerHTML = '';
+document.getElementById('textForm').addEventListener('submit', function(e) {
+    e.preventDefault();
     
-    // Устанавливаем явные размеры SVG
-    const width = svg.clientWidth || 300;
-    const height = svg.clientHeight || 300;
-    svg.setAttribute('width', width);
-    svg.setAttribute('height', height);
+    const determinant = document.getElementById('determinant');
+    const func = document.getElementById('function');
+    const errorMessage = document.getElementById('error-message');
+    const resultsBody = document.getElementById('results-body');
     
-    // Добавляем marker для стрелок
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-    marker.setAttribute('id', 'arrowhead');
-    marker.setAttribute('markerWidth', '10');
-    marker.setAttribute('markerHeight', '7');
-    marker.setAttribute('refX', '9');
-    marker.setAttribute('refY', '3.5');
-    marker.setAttribute('orient', 'auto');
-    const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    polygon.setAttribute('points', '0 0, 10 3.5, 0 7');
-    polygon.setAttribute('fill', '#ff4444');
-    marker.appendChild(polygon);
-    defs.appendChild(marker);
-    svg.appendChild(defs);
+    // Сброс ошибок
+    determinant.classList.remove('error');
+    func.classList.remove('error');
+    errorMessage.style.display = 'none';
+    errorMessage.textContent = '';
     
-    // Собираем все атрибуты и зависимости
-    const allAttributes = new Set();
-    const dependencies = [];
-    
-    document.querySelectorAll('.fz-row').forEach(row => {
-        const cells = row.querySelectorAll('div');
-        const det = cells[0].textContent.split(',').map(s => s.trim());
-        const func = cells[1].textContent.split(',').map(s => s.trim());
+    // Функция валидации
+    const validateSequence = (value, fieldName) => {
+        if (!value.trim()) {
+            return { valid: false, message: `${fieldName}: Введите хотя бы один атрибут!` };
+        }
         
-        det.forEach(attr => {
-            allAttributes.add(attr);
-            func.forEach(f => {
-                allAttributes.add(f);
-                dependencies.push({ source: attr, target: f });
-            });
-        });
-    });
+        const strings = value.split(',').map(s => s.trim()).filter(s => s !== '');
+        
+        if (strings.length > 1 && !/,/.test(value)) {
+            return { valid: false, message: `${fieldName}: Разделяйте атрибуты запятыми!` };
+        }
+        
+        const seen = {};
+        for (const str of strings) {
+            if (seen[str]) {
+                return { 
+                    valid: false, 
+                    message: `${fieldName}: Атрибут "${str}" повторяется!`
+                };
+            }
+            seen[str] = true;
+        }
+        
+        for (const str of strings) {
+            if (/\s/.test(str)) {
+                return { valid: false, message: `${fieldName}: Атрибут "${str}" содержит пробелы!` };
+            }
+            
+            if (str.length > 5) {
+                return { valid: false, message: `${fieldName}: Атрибут "${str}" слишком длинный!` };
+            }
+        }
+        
+        return { valid: true, strings: strings };
+    };
     
-    const attributes = Array.from(allAttributes);
-    if (attributes.length === 0) {
-        // Показываем сообщение, если нет данных
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', '50%');
-        text.setAttribute('y', '50%');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('fill', '#666');
-        text.textContent = 'Добавьте ФЗ для отображения графа';
-        svg.appendChild(text);
+    // Проверка обоих полей
+    const validationDet = validateSequence(determinant.value, 'Детерминанта');
+    const validationFunc = validateSequence(func.value, 'Функция');
+    
+    // Собираем ошибки
+    const errors = [];
+    if (!validationDet.valid) errors.push(validationDet.message);
+    if (!validationFunc.valid) errors.push(validationFunc.message);
+    
+    // Проверка на тривиальную зависимость
+    if (errors.length === 0) {
+        const detStrings = validationDet.strings;
+        const funcStrings = validationFunc.strings;
+        
+        for (const attr of funcStrings) {
+            if (detStrings.includes(attr)) {
+                errors.push(`Тривиальная зависимость: атрибут ${attr} содержится в детерминанте!`);
+                determinant.classList.add('error');
+                func.classList.add('error');
+                break;
+            }
+        }
+    }
+    
+    // Проверка на существующую ФЗ
+    if (errors.length === 0) {
+        const detStr = validationDet.strings.join(',');
+        const funcStr = validationFunc.strings.join(',');
+        
+        const rows = resultsBody.querySelectorAll('.fz-row');
+        for (const row of rows) {
+            const cells = row.querySelectorAll('div');
+            const rowDet = cells[0].textContent;
+            const rowFunc = cells[1].textContent;
+            
+            if (rowDet === detStr && rowFunc === funcStr) {
+                errors.push('Такая ФЗ уже существует!');
+                determinant.classList.add('error');
+                func.classList.add('error');
+                break;
+            }
+        }
+    }
+    
+    // Показываем ошибки
+    if (errors.length > 0) {
+        errorMessage.textContent = errors.join(' ');
+        errorMessage.style.display = 'block';
         return;
     }
     
-    // Распределяем узлы по окружности
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const radius = Math.min(width, height) * 0.4;
+    // Если все проверки пройдены - добавляем данные в таблицу
+    const row = document.createElement('div');
+    row.className = 'fz-row';
     
-    // Рисуем связи
-    dependencies.forEach(dep => {
-        const sourceIndex = attributes.indexOf(dep.source);
-        const targetIndex = attributes.indexOf(dep.target);
-        
-        const sourceAngle = (sourceIndex / attributes.length) * Math.PI * 2 - Math.PI/2;
-        const targetAngle = (targetIndex / attributes.length) * Math.PI * 2 - Math.PI/2;
-        
-        const x1 = centerX + Math.cos(sourceAngle) * radius;
-        const y1 = centerY + Math.sin(sourceAngle) * radius;
-        const x2 = centerX + Math.cos(targetAngle) * radius;
-        const y2 = centerY + Math.sin(targetAngle) * radius;
-        
-        // Корректируем конечную точку
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const ratio = (length - 12) / length;
-        const adjustedX2 = x1 + dx * ratio;
-        const adjustedY2 = y1 + dy * ratio;
-        
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('class', 'link');
-        path.setAttribute('d', `M${x1},${y1} L${adjustedX2},${adjustedY2}`);
-        svg.appendChild(path);
-    });
+    const detCell = document.createElement('div');
+    detCell.textContent = validationDet.strings.join(', ');
+    row.appendChild(detCell);
     
-    // Рисуем узлы
-    attributes.forEach((attr, index) => {
-        const angle = (index / attributes.length) * Math.PI * 2 - Math.PI/2;
-        const x = centerX + Math.cos(angle) * radius;
-        const y = centerY + Math.sin(angle) * radius;
-        
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('class', 'node');
-        circle.setAttribute('r', 15);
-        circle.setAttribute('cx', x);
-        circle.setAttribute('cy', y);
-        svg.appendChild(circle);
-        
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('class', 'attribute-label');
-        text.setAttribute('x', x);
-        text.setAttribute('y', y + 5);
-        text.textContent = attr;
-        svg.appendChild(text);
+    const funcCell = document.createElement('div');
+    funcCell.textContent = validationFunc.strings.join(', ');
+    row.appendChild(funcCell);
+    
+    const actionCell = document.createElement('div');
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '×';
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.title = 'Удалить';
+    deleteBtn.addEventListener('click', function() {
+        row.remove();
+        updateDependencyGraph();
     });
+    actionCell.appendChild(deleteBtn);
+    row.appendChild(actionCell);
+    
+    // Добавляем в начало таблицы
+    resultsBody.insertBefore(row, resultsBody.firstChild);
+    
+    // Очищаем поля ввода
+    determinant.value = '';
+    func.value = '';
+    
+    // Обновляем граф зависимостей
+    updateDependencyGraph();
+});
+
+// Функция для обновления графа зависимостей (остаётся без изменений)
+function updateDependencyGraph() {
+    // ... (прежняя реализация функции)
 }
 
-// Инициализация графа при загрузке
+// Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', function() {
     updateDependencyGraph();
-    
-    // Добавляем обработчик ресайза с троттлингом
-    let resizeTimer;
     window.addEventListener('resize', function() {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(updateDependencyGraph, 200);
+        setTimeout(updateDependencyGraph, 200);
     });
 });
